@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PDF Resume Reader with GPT API</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-parse/1.1.1/pdf-parse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: white;
+        text-align: center;
+        padding: 30px;
+      }
+
+      .header h1 {
+        font-size: 2.5em;
+        margin-bottom: 10px;
+        font-weight: 300;
+      }
+
+      .header p {
+        font-size: 1.1em;
+        opacity: 0.9;
+      }
+
+      .main-content {
+        padding: 40px;
+      }
+
+      .section {
+        margin-bottom: 30px;
+        padding: 25px;
+        border-radius: 15px;
+        background: #f8f9ff;
+        border: 1px solid #e1e5f2;
+      }
+
+      .section h2 {
+        color: #4facfe;
+        margin-bottom: 20px;
+        font-size: 1.4em;
+        font-weight: 600;
+      }
+
+      .upload-area {
+        border: 3px dashed #4facfe;
+        border-radius: 15px;
+        padding: 40px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: white;
+      }
+
+      .upload-area:hover {
+        border-color: #00f2fe;
+        background: #f0f8ff;
+        transform: translateY(-2px);
+      }
+
+      .upload-area.dragover {
+        border-color: #00f2fe;
+        background: #e6f3ff;
+      }
+
+      .upload-icon {
+        font-size: 3em;
+        color: #4facfe;
+        margin-bottom: 15px;
+      }
+
+      .form-group {
+        margin-bottom: 25px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #333;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        padding: 12px 15px;
+        border: 2px solid #e1e5f2;
+        border-radius: 10px;
+        font-size: 16px;
+        transition: border-color 0.3s ease;
+      }
+
+      input:focus,
+      textarea:focus {
+        outline: none;
+        border-color: #4facfe;
+      }
+
+      .keywords-input {
+        min-height: 100px;
+        resize: vertical;
+      }
+
+      .api-key-input {
+        font-family: monospace;
+      }
+
+      .analyze-btn {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        border-radius: 50px;
+        font-size: 1.1em;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 5px 15px rgba(79, 172, 254, 0.3);
+      }
+
+      .analyze-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(79, 172, 254, 0.4);
+      }
+
+      .analyze-btn:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+
+      .results {
+        display: none;
+        margin-top: 30px;
+      }
+
+      .result-card {
+        background: white;
+        border-radius: 15px;
+        padding: 25px;
+        margin-bottom: 20px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        border-left: 5px solid #4facfe;
+      }
+
+      .score-display {
+        font-size: 2.5em;
+        font-weight: bold;
+        color: #4facfe;
+        text-align: center;
+        margin: 20px 0;
+      }
+
+      .score-bar {
+        width: 100%;
+        height: 20px;
+        background: #e1e5f2;
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 10px 0;
+      }
+
+      .score-fill {
+        height: 100%;
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        transition: width 1s ease;
+      }
+
+      .keywords-match {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 10px;
+        margin-top: 15px;
+      }
+
+      .keyword-tag {
+        padding: 8px 12px;
+        border-radius: 25px;
+        font-size: 0.9em;
+        font-weight: 500;
+        text-align: center;
+      }
+
+      .keyword-matched {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+
+      .keyword-missed {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+
+      .contact-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 15px;
+      }
+
+      .contact-item {
+        background: #f8f9ff;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #e1e5f2;
+      }
+
+      .contact-label {
+        font-weight: 600;
+        color: #4facfe;
+        margin-bottom: 5px;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 20px;
+        color: #4facfe;
+      }
+
+      .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #4facfe;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 15px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .error {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #f5c6cb;
+        margin-top: 15px;
+      }
+
+      .info-tooltip {
+        background: #e3f2fd;
+        border: 1px solid #bbdefb;
+        border-radius: 8px;
+        padding: 10px;
+        margin-top: 10px;
+        font-size: 0.9em;
+        color: #1565c0;
+      }
+
+      @media (max-width: 768px) {
+        .container {
+          margin: 10px;
+          border-radius: 15px;
+        }
+
+        .main-content {
+          padding: 20px;
+        }
+
+        .header h1 {
+          font-size: 2em;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🚀 AI Resume Analyzer</h1>
+        <p>
+          Upload a PDF resume and get intelligent analysis with keyword
+          matching, scoring, and data extraction
+        </p>
+      </div>
+
+      <div class="main-content">
+        <!-- API Key Section -->
+        <div class="section">
+          <h2>🔑 OpenAI API Configuration</h2>
+          <div class="form-group">
+            <label for="apiKey">OpenAI API Key:</label>
+            <input
+              type="password"
+              id="apiKey"
+              class="api-key-input"
+              placeholder="sk-..."
+              required
+            />
+            <div class="info-tooltip">
+              Your API key is stored locally and never sent to our servers. Get
+              your key from
+              <a href="https://platform.openai.com/api-keys" target="_blank"
+                >OpenAI Platform</a
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- File Upload Section -->
+        <div class="section">
+          <h2>📄 Upload Resume (PDF)</h2>
+          <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📎</div>
+            <h3>Drop your PDF resume here or click to browse</h3>
+            <p>Supports PDF files up to 10MB</p>
+            <input
+              type="file"
+              id="fileInput"
+              accept=".pdf"
+              style="display: none"
+            />
+          </div>
+          <div
+            id="fileName"
+            style="margin-top: 15px; font-weight: 600; color: #4facfe"
+          ></div>
+        </div>
+
+        <!-- Keywords Section -->
+        <div class="section">
+          <h2>🎯 Job Requirements Keywords</h2>
+          <div class="form-group">
+            <label for="keywords">Enter keywords (comma-separated):</label>
+            <textarea
+              id="keywords"
+              class="keywords-input"
+              placeholder="React, Node.js, JavaScript, Python, AWS, Docker, MongoDB, REST API, Git, Agile, Leadership, Communication"
+            ></textarea>
+            <div class="info-tooltip">
+              Enter relevant skills, technologies, and qualifications. The
+              system will check how many of these keywords appear in the resume.
+            </div>
+          </div>
+        </div>
+
+        <!-- Analyze Button -->
+        <div style="text-align: center; margin: 30px 0">
+          <button class="analyze-btn" id="analyzeBtn" onclick="analyzeResume()">
+            🔍 Analyze Resume
+          </button>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results" class="results">
+          <div class="section">
+            <h2>📊 Analysis Results</h2>
+
+            <!-- Compatibility Score -->
+            <div class="result-card">
+              <h3>🎯 Compatibility Score</h3>
+              <div class="score-display" id="compatibilityScore">0%</div>
+              <div class="score-bar">
+                <div class="score-fill" id="scoreFill" style="width: 0%"></div>
+              </div>
+              <p id="scoreDescription"></p>
+            </div>
+
+            <!-- Keywords Match -->
+            <div class="result-card">
+              <h3>🔍 Keywords Analysis</h3>
+              <div id="keywordStats"></div>
+              <div class="keywords-match" id="keywordsMatch"></div>
+            </div>
+
+            <!-- Experience -->
+            <div class="result-card">
+              <h3>⏱️ Experience Analysis</h3>
+              <div id="experienceInfo"></div>
+            </div>
+
+            <!-- Contact Information -->
+            <div class="result-card">
+              <h3>📞 Contact Information</h3>
+              <div class="contact-info" id="contactInfo"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loading -->
+        <div id="loading" class="loading" style="display: none">
+          <div class="spinner"></div>
+          <p>Analyzing resume with AI... This may take a few moments.</p>
+        </div>
+
+        <!-- Error Display -->
+        <div id="error" class="error" style="display: none"></div>
+      </div>
+    </div>
+
+    <script>
+      let uploadedFile = null;
+      let extractedText = "";
+
+      // File upload handling
+      const uploadArea = document.getElementById("uploadArea");
+      const fileInput = document.getElementById("fileInput");
+      const fileName = document.getElementById("fileName");
+
+      uploadArea.addEventListener("click", () => fileInput.click());
+      uploadArea.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        uploadArea.classList.add("dragover");
+      });
+      uploadArea.addEventListener("dragleave", () =>
+        uploadArea.classList.remove("dragover")
+      );
+      uploadArea.addEventListener("drop", (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove("dragover");
+        const files = e.dataTransfer.files;
+        if (files.length > 0) handleFile(files[0]);
+      });
+
+      fileInput.addEventListener("change", (e) => {
+        if (e.target.files.length > 0) {
+          handleFile(e.target.files[0]);
+        }
+      });
+
+      function handleFile(file) {
+        if (file.type !== "application/pdf") {
+          showError("Please upload a PDF file.");
+          return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          showError("File size must be less than 10MB.");
+          return;
+        }
+
+        uploadedFile = file;
+        fileName.textContent = `Selected: ${file.name}`;
+        extractPDFText(file);
+      }
+
+      async function extractPDFText(file) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+          let text = "";
+
+          for (let i = 0; i < pdf.numPages; i++) {
+            const page = await pdf.getPage(i + 1);
+            const content = await page.getTextContent();
+            const pageText = content.items.map((item) => item.str).join(" ");
+            text += pageText + "\n";
+          }
+
+          extractedText = text.trim();
+          console.log("Extracted text length:", extractedText.length);
+        } catch (error) {
+          console.error("PDF extraction error:", error);
+          showError(
+            "Failed to extract text from PDF. Please ensure the file is not corrupted."
+          );
+        }
+      }
+
+      async function analyzeResume() {
+        const apiKey = document.getElementById("apiKey").value.trim();
+        const keywords = document.getElementById("keywords").value.trim();
+
+        if (!apiKey) {
+          showError("Please enter your OpenAI API key.");
+          return;
+        }
+        if (!uploadedFile || !extractedText) {
+          showError("Please upload a PDF resume first.");
+          return;
+        }
+        if (!keywords) {
+          showError("Please enter keywords to match against.");
+          return;
+        }
+
+        showLoading(true);
+        hideError();
+
+        console.log(extractedText);
+        try {
+          const keywordArray = keywords
+            .split(",")
+            .map((k) => k.trim())
+            .filter((k) => k);
+
+          // Call GPT API for analysis
+          const analysisPrompt = `
+                Analyze the following resume text and provide a JSON response with the following structure:
+                {
+                    "keywordMatches": {
+                        "matched": ["list of keywords found in resume"],
+                        "missed": ["list of keywords not found in resume"]
+                    },
+                    "compatibilityScore": number (0-100),
+                    "experienceYears": number,
+                    "experienceDetails": "string describing experience analysis",
+                    "contactInfo": {
+                        "name": "string or null",
+                        "email": "string or null",
+                        "phone": "string or null",
+                        "linkedin": "string or null",
+                        "location": "string or null",
+                        "website": "string or null"
+                    },
+                    "scoreExplanation": "string explaining the compatibility score"
+                }
+
+                Keywords to match: ${keywordArray.join(", ")}
+                
+                Resume text:
+                ${extractedText}
+                
+                Instructions:
+                - For keywordMatches, check if each keyword appears in the resume (case-insensitive, partial matches allowed)
+                - Calculate compatibilityScore based on keyword matches, experience relevance, and overall fit
+                - For experienceYears, analyze work history and calculate total years of professional experience
+                - Extract all available contact information
+                - Provide a clear explanation for the compatibility score
+                `;
+
+          const response = await fetch(
+            "https://api.openai.com/v1/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [
+                  {
+                    role: "system",
+                    content:
+                      "You are an expert resume analyzer. Always respond with valid JSON only.",
+                  },
+                  {
+                    role: "user",
+                    content: analysisPrompt,
+                  },
+                ],
+                max_tokens: 2000,
+                temperature: 0.3,
+              }),
+            }
+          );
+
+          //   if (!response.ok) {
+          //     const errorData = await response.json();
+          //     throw new Error(
+          //       errorData.error?.message ||
+          //         `API request failed: ${response.status}`
+          //     );
+          //   }
+          console.log("API response received");
+          console.log("Response status:", response.status);
+          // const data = await response.json();
+          // const analysisResult = JSON.parse(data.choices[0].message.content);
+
+          // displayResults(analysisResult, keywordArray);
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(
+              errorData.error?.message ||
+                `API request failed: ${response.status}`
+            );
+          }
+
+          const data = await response.json();
+          let content = data.choices[0].message.content;
+
+          // Extract JSON from markdown code blocks if present
+          const jsonMatch = content.match(
+            /```(?:json)?\s*(\{[\s\S]*?\})\s*```/
+          );
+          if (jsonMatch) {
+            content = jsonMatch[1];
+          } else {
+            // If no code blocks, try to find JSON object
+            const jsonStart = content.indexOf("{");
+            const jsonEnd = content.lastIndexOf("}");
+            if (jsonStart !== -1 && jsonEnd !== -1) {
+              content = content.substring(jsonStart, jsonEnd + 1);
+            }
+          }
+
+          const analysisResult = JSON.parse(content);
+
+          displayResults(analysisResult, keywordArray);
+        } catch (error) {
+          console.error("Analysis error:", error);
+          showError(`Analysis failed: ${error.message}`);
+        } finally {
+          showLoading(false);
+        }
+      }
+
+      function displayResults(analysis, originalKeywords) {
+        // Compatibility Score
+        const score = analysis.compatibilityScore;
+        document.getElementById("compatibilityScore").textContent = `${score}%`;
+        document.getElementById("scoreFill").style.width = `${score}%`;
+        document.getElementById("scoreDescription").textContent =
+          analysis.scoreExplanation;
+
+        // Keywords Analysis
+        const matched = analysis.keywordMatches.matched || [];
+        const missed = analysis.keywordMatches.missed || [];
+
+        document.getElementById("keywordStats").innerHTML = `
+                <p><strong>Matched:</strong> ${matched.length}/${
+          originalKeywords.length
+        } keywords</p>
+                <p><strong>Match Rate:</strong> ${Math.round(
+                  (matched.length / originalKeywords.length) * 100
+                )}%</p>
+            `;
+
+        const keywordsContainer = document.getElementById("keywordsMatch");
+        keywordsContainer.innerHTML = "";
+
+        matched.forEach((keyword) => {
+          const tag = document.createElement("div");
+          tag.className = "keyword-tag keyword-matched";
+          tag.textContent = `✓ ${keyword}`;
+          keywordsContainer.appendChild(tag);
+        });
+
+        missed.forEach((keyword) => {
+          const tag = document.createElement("div");
+          tag.className = "keyword-tag keyword-missed";
+          tag.textContent = `✗ ${keyword}`;
+          keywordsContainer.appendChild(tag);
+        });
+
+        // Experience
+        document.getElementById("experienceInfo").innerHTML = `
+                <p><strong>Total Experience:</strong> ${analysis.experienceYears} years</p>
+                <p><strong>Analysis:</strong> ${analysis.experienceDetails}</p>
+            `;
+
+        // Contact Information
+        const contactContainer = document.getElementById("contactInfo");
+        contactContainer.innerHTML = "";
+
+        const contactFields = [
+          { label: "Name", value: analysis.contactInfo.name, icon: "👤" },
+          { label: "Email", value: analysis.contactInfo.email, icon: "📧" },
+          { label: "Phone", value: analysis.contactInfo.phone, icon: "📱" },
+          {
+            label: "LinkedIn",
+            value: analysis.contactInfo.linkedin,
+            icon: "💼",
+          },
+          {
+            label: "Location",
+            value: analysis.contactInfo.location,
+            icon: "📍",
+          },
+          { label: "Website", value: analysis.contactInfo.website, icon: "🌐" },
+        ];
+
+        contactFields.forEach((field) => {
+          if (field.value) {
+            const item = document.createElement("div");
+            item.className = "contact-item";
+            item.innerHTML = `
+                        <div class="contact-label">${field.icon} ${field.label}</div>
+                        <div>${field.value}</div>
+                    `;
+            contactContainer.appendChild(item);
+          }
+        });
+
+        if (contactContainer.children.length === 0) {
+          contactContainer.innerHTML =
+            "<p>No contact information found in the resume.</p>";
+        }
+
+        document.getElementById("results").style.display = "block";
+        document
+          .getElementById("results")
+          .scrollIntoView({ behavior: "smooth" });
+      }
+
+      function showLoading(show) {
+        document.getElementById("loading").style.display = show
+          ? "block"
+          : "none";
+        document.getElementById("analyzeBtn").disabled = show;
+        if (show) {
+          document.getElementById("results").style.display = "none";
+        }
+      }
+
+      function showError(message) {
+        const errorDiv = document.getElementById("error");
+        errorDiv.textContent = message;
+        errorDiv.style.display = "block";
+      }
+
+      function hideError() {
+        document.getElementById("error").style.display = "none";
+      }
+
+      // Load PDF.js worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    </script>
+  </body>
+</html>
